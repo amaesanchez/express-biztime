@@ -2,9 +2,10 @@
 
 const express = require("express");
 const db = require("../db");
-const { BadRequestError } = require("../expressError");
+const { NotFoundError } = require("../expressError");
 const router = express.Router();
 
+//add order by in sql command
 /* Returns list of companies, like {companies: [{code, name}, ...]}**/
 router.get("/", async function (req, res, next) {
     const results = await db.query(
@@ -28,8 +29,9 @@ router.get("/:code", async function (req, res, next) {
 
     const company = results.rows;
 
+    // add code name
     if (company.length === 0) {
-        throw new BadRequestError();
+        throw new NotFoundError("Company not found.");
     }
     return res.json({ company })
 })
@@ -53,74 +55,54 @@ router.post("/", async function (req, res, next) {
     return res.status(201).json({ company });
 });
 
+/** Edit existing company.
 
+Should return 404 if company cannot be found.
 
-// this version has security holes --- you could inject SQL
-// because the input isn't sanitized!
+Needs to be given JSON like: {name, description}
 
-/** Search by user type. */
-
-router.get("/search",
-    async function (req, res, next) {
-        const type = req.query.type;
-
-        const results = await db.query(
-            `SELECT id, name, type
-        FROM users
-        WHERE type = '${type}'`);
-        const users = results.rows;
-        return res.json({ users });
-    });
-//end-search
-
-// fixed version that uses parameterized query
-
-// (Fixed) Search by user type. */
-
-router.get("/good-search",
-    async function (req, res, next) {
-        const type = req.query.type;
-
-        const results = await db.query(
-            `SELECT id, name, type
-               FROM users
-               WHERE type = $1`, [type]);
-        const users = results.rows;
-        return res.json({ users });
-    });
-
-
-/** Create new user, return user */
-
-
-
-
-/** Update user, returning user */
-
-router.patch("/:id", async function (req, res, next) {
+Returns update company object: {company: {code, name, description}} */
+router.put("/:code", async function(req, res) {
     if (req.body === undefined) throw new BadRequestError();
-    const { name, type } = req.body;
 
+
+    const { name, description } = req.body;
+    const code = req.params.code;
     const result = await db.query(
-        `UPDATE users
-           SET name=$1,
-               type=$2
-           WHERE id = $3
-           RETURNING id, name, type`,
-        [name, type, req.params.id],
+        `UPDATE companies
+            SET name=$1,
+                description=$2
+            WHERE code=$3
+            RETURNING code, name, description`,
+            [name, description, code]
     );
-    const user = result.rows[0];
-    return res.json({ user });
+    const company = result.rows[0]
+
+    if (company.length === 0) {
+        throw new NotFoundError("Company not found.");
+    }
+
+    return res.json({ company })
 });
 
 
-/** Delete user, returning {message: "Deleted"} */
+/** Deletes company.
 
-router.delete("/:id", async function (req, res, next) {
-    await db.query(
-        "DELETE FROM users WHERE id = $1",
-        [req.params.id],
+Should return 404 if company cannot be found.
+
+Returns {message: "Deleted"} */
+router.delete("/:code", async function (req, res) {
+
+    const result = await db.query(
+        `DELETE FROM companies WHERE code = $1
+        RETURNING code, name, description`,
+        [req.params.code],
     );
+
+    if (result.rows.length === 0) {
+        throw new NotFoundError("Company not found.");
+    }
+
     return res.json({ message: "Deleted" });
 });
 // end
