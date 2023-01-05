@@ -1,3 +1,5 @@
+"use strict";
+
 /** Routes for companies of biztime. */
 
 const express = require("express");
@@ -16,25 +18,25 @@ router.get("/", async function (req, res, next) {
     return res.json({ companies })
 })
 
-/* Return obj of company: {company: {code, name, description}}
+// /* Return obj of company: {company: {code, name, description}}
 
-If the company given cannot be found, this should return a 404 status response. **/
-router.get("/:code", async function (req, res, next) {
-    const code = req.params.code;
-    const results = await db.query(
-        `SELECT code, name, description
-        FROM companies
-        WHERE code = $1`, [code]
-    );
+// If the company given cannot be found, this should return a 404 status response. **/
+// router.get("/:code", async function (req, res, next) {
+//     const code = req.params.code;
+//     const results = await db.query(
+//         `SELECT code, name, description
+//         FROM companies
+//         WHERE code = $1`, [code]
+//     );
 
-    const company = results.rows;
+//     const company = results.rows;
 
-    // add code name
-    if (company.length === 0) {
-        throw new NotFoundError("Company not found.");
-    }
-    return res.json({ company })
-})
+//     // add code name
+//     if (company.length === 0) {
+//         throw new NotFoundError("Company not found.");
+//     }
+//     return res.json({ company })
+// })
 
 /* Adds a company.
 
@@ -105,6 +107,39 @@ router.delete("/:code", async function (req, res) {
 
     return res.json({ message: "Deleted" });
 });
+
+/** Return obj of company: {company: {code, name, description,
+ *  invoices: [id, ...]}}
+ * If the company given cannot be found, this should return
+ * a 404 status response. */
+ router.get("/:code", async function (req, res) {
+
+    const code = req.params.code;
+    const companyResults = await db.query(
+        `SELECT code, name, description
+        FROM companies
+        WHERE code = $1`, [code]
+    );
+
+    const company = companyResults.rows[0];
+    if (companyResults.length === 0) {
+        throw new NotFoundError(`Company code:${code} not found.`);
+    }
+
+    const invoiceResults = await db.query(
+        `SELECT id
+        FROM invoices AS i
+        JOIN companies as c
+        ON c.code = i.comp_code
+        WHERE c.code = $1`, [code]
+    );
+
+    const invoicesIds = invoiceResults.rows.map(i => i.id);
+    company.invoices = invoicesIds
+
+    return res.json({ company })
+})
+
 // end
 
 

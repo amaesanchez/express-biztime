@@ -1,3 +1,4 @@
+"use strict";
 /** Routes for invoices of biztime. */
 
 const express = require("express");
@@ -34,13 +35,14 @@ router.get("/:id", async function (req, res, next) {
 
     const invoice = invoiceResults.rows[0];
     if (invoiceResults.length === 0) {
-        throw new NotFoundError("Company not found.");
+        throw new NotFoundError(`Invoice id:${invoiceId} not found.`);
     }
+
     const companyResults = await db.query(
-        `SELECT code, name, description 
-        FROM invoices AS i 
-        JOIN companies as c 
-        ON c.code = i.comp_code 
+        `SELECT code, name, description
+        FROM invoices AS i
+        JOIN companies as c
+        ON c.code = i.comp_code
         WHERE i.id = $1`, [invoiceId]
     )
 
@@ -50,71 +52,76 @@ router.get("/:id", async function (req, res, next) {
     return res.json({ invoice })
 })
 
-/* Adds a invoice.
+/* Adds an invoice.
 
-Needs to be given JSON like: {code, name, description}
+Needs to be passed in JSON body of: {comp_code, amt}
 
-Returns obj of new invoice: {invoice: {code, name, description}} **/
+Returns: {invoice: {id, comp_code, amt, paid, add_date, paid_date}} **/
 router.post("/", async function (req, res, next) {
     console.log("*** making POST request, req.body:", req.body);
+
     if (req.body === undefined) throw new BadRequestError();
-    const { code, name, description } = req.body;
+
+    const { comp_code, amt } = req.body;
     const result = await db.query(
-        `INSERT INTO invoices (code, name, description)
-           VALUES ($1, $2, $3)
-           RETURNING code, name, description`,
-        [code, name, description],
+        `INSERT INTO invoices (comp_code, amt)
+           VALUES ($1, $2)
+           RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+        [comp_code, amt]
     );
     const invoice = result.rows[0];
+
     return res.status(201).json({ invoice });
 });
 
-/** Edit existing invoice.
+/** Updates an invoice.
 
-Should return 404 if invoice cannot be found.
+If invoice cannot be found, returns a 404.
 
-Needs to be given JSON like: {name, description}
+Needs to be passed in a JSON body of {amt}
 
-Returns update invoice object: {invoice: {code, name, description}} */
-router.put("/:code", async function (req, res) {
+Returns: {invoice: {id, comp_code, amt, paid, add_date, paid_date}} */
+router.put("/:id", async function (req, res) {
     if (req.body === undefined) throw new BadRequestError();
 
-
-    const { name, description } = req.body;
-    const code = req.params.code;
+    const { amt } = req.body;
+    const invoiceId = req.params.id;
     const result = await db.query(
         `UPDATE invoices
-            SET name=$1,
-                description=$2
-            WHERE code=$3
-            RETURNING code, name, description`,
-        [name, description, code]
+            SET amt=$1
+            WHERE id=$2
+            RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+        [amt, invoiceId]
     );
     const invoice = result.rows[0]
 
-    if (invoice.length === 0) {
-        throw new NotFoundError("Company not found.");
+    if (!invoice) {
+        throw new NotFoundError(`Invoice id:${invoiceId} not found.`);
     }
 
     return res.json({ invoice })
 });
 
 
-/** Deletes company.
+/** Deletes an invoice.
 
-Should return 404 if company cannot be found.
+If invoice cannot be found, returns a 404.
 
-Returns {message: "Deleted"} */
-router.delete("/:code", async function (req, res) {
+Returns: { message: "Deleted" } */
+router.delete("/:id", async function (req, res) {
+    const id = req.params.id;
+
+    if (id === undefined) throw new BadRequestError(`Invoice Id:
+        ${id} was not given`);
 
     const result = await db.query(
-        `DELETE FROM invoices WHERE code = $1
-        RETURNING code, name, description`,
-        [req.params.code],
+        `DELETE FROM invoices WHERE id = $1
+        RETURNING id, comp_code`,
+        [id],
     );
 
     if (result.rows.length === 0) {
-        throw new NotFoundError("Company not found.");
+        throw new NotFoundError("Nothing was deleted from database.");
     }
 
     return res.json({ message: "Deleted" });
