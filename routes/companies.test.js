@@ -2,7 +2,6 @@ const request = require("supertest");
 const app = require("../app");
 const db = require("../db");
 
-let testUserId;
 
 beforeEach(async function () {
     await db.query("DELETE FROM companies");
@@ -11,8 +10,8 @@ beforeEach(async function () {
          VALUES ('tacos', 'taco_launcher', 'for when you want a taco, but faster')
          RETURNING code`);
     const invoiceResults = await db.query(
-        `INSERT INTO invoices (id, comp_code, amt, paid, add_date, paid_date)
-        VALUES ('1', 'tacos', '1000', 'False', 'timeStamp', 'timeStamp')
+        `INSERT INTO invoices (id, comp_code, amt)
+        VALUES ('1', 'tacos', '1000')
         RETURNING id`
     )
     companyCode = companyResults.rows[0].code;
@@ -29,11 +28,11 @@ describe("GET /companies", function () {
 
     test("Tests the get request for /companies", async function () {
         const resp = await request(app).get("/companies");
+        console.log(resp.body);
         expect(resp.body).toEqual({
             "companies": [{
                 "code": "tacos",
-                "name": "taco_launcher",
-                "description": 'for when you want a taco, but faster'
+                "name": "taco_launcher"
             }]
         });
     });
@@ -54,58 +53,53 @@ describe("GET /companies/:code", function () {
     })
 });
 
-test("POST /companies", async function () {
-    const resp = await request(app)
-        .post("/companies")
-        .send({
-            "code": "burrito",
-            "name": "Burritos",
-            "description": "Not as good as tacos, obviously"
+describe("POST /companies", function () {
+    test("Adds new company to companies db", async function () {
+        const resp = await request(app)
+            .post("/companies")
+            .send({
+                "code": "burrito",
+                "name": "Burritos",
+                "description": "Not as good as tacos, obviously"
+            });
+        expect(resp.body).toEqual({
+            "company": {
+                "code": "burrito",
+                "name": "Burritos",
+                "description": "Not as good as tacos, obviously",
+            },
         });
-    expect(resp.body).toEqual({
-        "company": {
-            "code": "burrito",
-            "name": "Burritos",
-            "description": "Not as good as tacos, obviously",
-        },
+        const results = await db.query("SELECT COUNT(*) FROM companies");
+        expect(results.rows[0].count).toEqual("2");
     });
-    const results = await db.query("SELECT COUNT(*) FROM companies");
-    expect(results.rows[0].count).toEqual("2");
 });
 
-// test("POST / returns 400 if empty request body", async function () {
-//     const resp = await request(app)
-//         .post("/users")
-//         .send();
-//     expect(resp.statusCode).toEqual(400);
-// });
+describe("PUT /companies/[code]", function() {
+    test("Updates company given company code", async function () {
+        const resp = await request(app)
+            .put(`/companies/tacos`)
+            .send({
+                "name": "Crunchwrap",
+                "description": "Best item on taco bell"
+            });
 
-// test("PATCH /users/:id", async function () {
-//     const resp = await request(app)
-//         .patch(`/users/${testUserId}`)
-//         .send({ name: "Joel2", type: "dev2" });
-//     expect(resp.body).toEqual({
-//         user: {
-//             id: expect.any(Number),
-//             name: "Joel2",
-//             type: "dev2",
-//         },
-//     });
-//     const results = await db.query("SELECT COUNT(*) FROM users");
-//     expect(results.rows[0].count).toEqual("1");
-// });
+        expect(resp.body).toEqual({
+            "company": {
+                "code": "tacos",
+                "name": "Crunchwrap",
+                "description": "Best item on taco bell"
+            },
+        });
+    });
+});
 
-// test("PATCH /users/:id returns 400 if empty request body", async function () {
-//     const resp = await request(app)
-//         .patch(`/users/${testUserId}`)
-//         .send();
-//     expect(resp.statusCode).toEqual(400);
-// });
+describe("DELETE /companies/:code", function() {
+    test("Deletes single company from companies database", async function () {
+        const resp = await request(app)
+            .delete(`/companies/tacos`);
+        expect(resp.body).toEqual({ message: "Deleted" });
 
-// test("DELETE /users/:id", async function () {
-//     const resp = await request(app)
-//         .delete(`/users/${testUserId}`);
-//     expect(resp.body).toEqual({ message: "Deleted" });
-//     const results = await db.query("SELECT COUNT(*) FROM users");
-//     expect(results.rows[0].count).toEqual("0");
-// });
+        const results = await db.query("SELECT COUNT(*) FROM companies");
+        expect(results.rows[0].count).toEqual("0");
+    });
+});

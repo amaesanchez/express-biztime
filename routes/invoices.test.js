@@ -1,131 +1,117 @@
-// const request = require("supertest");
-// const app = require("../app");
-// const db = require("../db");
+"use strict";
 
-// let testUserId;
+const request = require("supertest");
+const app = require("../app");
+const db = require("../db");
+const { ExpressError } = require("../expressError");
 
-// beforeEach(async function () {
-//     await db.query("DELETE FROM users");
-//     const results = await db.query(
-//         `INSERT INTO users (name, type)
-//          VALUES ('Joel', 'dev')
-//          RETURNING id`);
-//     testUserId = results.rows[0].id;
-// });
+let invoiceId;
 
-// afterAll(async function () {
-//     await db.end();
-// });
+beforeEach(async function () {
+    await db.query("DELETE FROM invoices");
+    await db.query("DELETE FROM companies");
+    const companyResults = await db.query(
+      `INSERT INTO companies (code, name, description)
+       VALUES ('tacos', 'taco_launcher', 'for when you want a taco, but faster')
+       RETURNING code`);
+    const invoiceResults = await db.query(
+        `INSERT INTO invoices (comp_code, amt)
+        VALUES ('tacos', '1000')
+        RETURNING id`
+    )
+    invoiceId = invoiceResults.rows[0].id;
+});
 
-// test("/users", async function () {
-//     const resp = await request(app).get("/users");
-//     expect(resp.body).toEqual({
-//         users: [{
-//             id: expect.any(Number),
-//             name: "Joel",
-//             type: "dev",
-//         }],
-//     });
-// });
+afterAll(async function () {
+    await db.end();
+});
 
-// describe("/users/search", function () {
 
-//     test("good search", async function () {
-//         const resp = await request(app)
-//             .get("/users/search")
-//             .query({ type: "dev" });
-//         expect(resp.body).toEqual({
-//             users: [{
-//                 id: expect.any(Number),
-//                 name: "Joel",
-//                 type: "dev",
-//             }],
-//         });
-//     });
+describe(`GET /invoices id`, function () {
+  test("Tests the get request for /invoices", async function () {
+    console.log(invoiceId);
+      const resp = await request(app).get("/invoices");
+      expect(resp.body).toEqual({
+          "invoices": [{
+              "id": invoiceId,
+              "comp_code": "tacos"
+          }]
+      });
+  });
+});
 
-//     test("bad search", async function () {
-//         const resp = await request(app)
-//             .get("/users/search")
-//             .query({ type: "nope" });
-//         expect(resp.body).toEqual({
-//             users: [],
-//         });
-//     });
-// });
+describe("GET /invoices/:id", function () {
+  test("Tests the GET request for a specific company", async function () {
+      const resp = await request(app).get(`/invoices/${invoiceId}`);
+      expect(resp.body).toEqual({
+          "invoice": {
+              "id": invoiceId,
+              "amt": "1000.00",
+              "paid": false,
+              "add_date": expect.any(String),
+              "paid_date": null,
+              "company": {
+                "code" : "tacos",
+                "name" : "taco_launcher",
+                "description" : "for when you want a taco, but faster"
+              }
+          }
+      })
+  })
+});
 
-// describe("/users/good-search", function () {
+describe("POST /invoices", function () {
+  test("Adds new invoice to invoices db", async function () {
+      const resp = await request(app)
+          .post("/invoices")
+          .send({
+              "comp_code": "tacos",
+              "amt": "30"
+          });
+      expect(resp.body).toEqual({
+          "invoice": {
+              "id": invoiceId + 1,
+              "comp_code": "tacos",
+              "amt": "30.00",
+              "paid": false,
+              "add_date": expect.any(String),
+              "paid_date": null
+          }
+      });
+      const results = await db.query("SELECT COUNT(*) FROM invoices");
+      expect(results.rows[0].count).toEqual("2");
+  });
+});
 
-//     test("good search", async function () {
-//         const resp = await request(app)
-//             .get("/users/good-search")
-//             .query({ type: "dev" });
-//         expect(resp.body).toEqual({
-//             users: [{
-//                 id: expect.any(Number),
-//                 name: "Joel",
-//                 type: "dev",
-//             }],
-//         });
-//     });
+describe("PUT /invoices/[id]", function() {
+  test("Updates invoice given invoice id", async function () {
+      const resp = await request(app)
+          .put(`/invoices/${invoiceId}`)
+          .send({
+              "amt": "10.00"
+          });
 
-//     test("bad search", async function () {
-//         const resp = await request(app)
-//             .get("/users/good-search")
-//             .query({ type: "nope" });
-//         expect(resp.body).toEqual({
-//             users: [],
-//         });
-//     });
-// });
+      expect(resp.body).toEqual({
+          "invoice": {
+              "id": invoiceId,
+              "comp_code": "tacos",
+              "amt": "10.00",
+              "paid": false,
+              "add_date": expect.any(String),
+              "paid_date": null
+          }
+      });
+  });
+});
 
-// test("POST /", async function () {
-//     const resp = await request(app)
-//         .post("/users")
-//         .send({ name: "Ann", type: "devops" });
-//     expect(resp.body).toEqual({
-//         user: {
-//             id: expect.any(Number),
-//             name: "Ann",
-//             type: "devops",
-//         },
-//     });
-//     const results = await db.query("SELECT COUNT(*) FROM users");
-//     expect(results.rows[0].count).toEqual("2");
-// });
+describe("DELETE /invoices/:id", function() {
+  test("Deletes single invoice from invoices database", async function () {
 
-// test("POST / returns 400 if empty request body", async function () {
-//     const resp = await request(app)
-//         .post("/users")
-//         .send();
-//     expect(resp.statusCode).toEqual(400);
-// });
+      const resp = await request(app)
+          .delete(`/invoices/${invoiceId}`);
+      expect(resp.body).toEqual({ message: "Deleted" });
 
-// test("PATCH /users/:id", async function () {
-//     const resp = await request(app)
-//         .patch(`/users/${testUserId}`)
-//         .send({ name: "Joel2", type: "dev2" });
-//     expect(resp.body).toEqual({
-//         user: {
-//             id: expect.any(Number),
-//             name: "Joel2",
-//             type: "dev2",
-//         },
-//     });
-//     const results = await db.query("SELECT COUNT(*) FROM users");
-//     expect(results.rows[0].count).toEqual("1");
-// });
-
-// test("PATCH /users/:id returns 400 if empty request body", async function () {
-//     const resp = await request(app)
-//         .patch(`/users/${testUserId}`)
-//         .send();
-//     expect(resp.statusCode).toEqual(400);
-// });
-
-// test("DELETE /users/:id", async function () {
-//     const resp = await request(app)
-//         .delete(`/users/${testUserId}`);
-//     expect(resp.body).toEqual({ message: "Deleted" });
-//     const results = await db.query("SELECT COUNT(*) FROM users");
-//     expect(results.rows[0].count).toEqual("0");
-// });
+      const results = await db.query("SELECT COUNT(*) FROM invoices");
+      expect(results.rows[0].count).toEqual("0");
+  });
+});
