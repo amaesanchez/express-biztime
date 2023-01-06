@@ -3,10 +3,10 @@
 
 const express = require("express");
 const db = require("../db");
-const { NotFoundError } = require("../expressError");
+const { NotFoundError, BadRequestError } = require("../expressError");
 const router = express.Router();
 
-//add order by in sql command
+
 /* Returns list of invoices, like {invoices: [{id, comp_code}, ...]}**/
 router.get("/", async function (req, res, next) {
 
@@ -34,7 +34,7 @@ router.get("/:id", async function (req, res, next) {
     );
 
     const invoice = invoiceResults.rows[0];
-    if (invoiceResults.length === 0) {
+    if (!invoice) {
         throw new NotFoundError(`Invoice id:${invoiceId} not found.`);
     }
 
@@ -111,16 +111,15 @@ Returns: { message: "Deleted" } */
 router.delete("/:id", async function (req, res) {
     const id = req.params.id;
 
-    if (id === undefined) throw new BadRequestError(`Invoice Id:
-        ${id} was not given`);
-
     const result = await db.query(
-        `DELETE FROM invoices WHERE id = $1
-        RETURNING id, comp_code`,
+        `DELETE FROM invoices
+            WHERE id = $1
+            RETURNING id, comp_code`,
         [id],
     );
 
-    if (result.rows.length === 0) {
+    const deleted = result.rows[0];
+    if (!deleted) {
         throw new NotFoundError("Nothing was deleted from database.");
     }
 
